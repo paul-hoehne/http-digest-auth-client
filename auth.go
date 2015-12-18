@@ -2,7 +2,6 @@ package httpDigestAuth
 
 import (
 	"fmt"
-	//"io/ioutil"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
@@ -57,6 +56,21 @@ func (d *DigestHeaders) digestChecksum() {
 		io.WriteString(h, A2)
 		d.HA2 = fmt.Sprintf("%x", h.Sum(nil))
 	case "MD5-sess":
+		// A1
+		h := md5.New()
+		A1 := fmt.Sprintf("%s:%s:%s", d.Username, d.Realm, d.Password)
+		io.WriteString(h, A1)
+		haPre := fmt.Sprintf("%x", h.Sum(nil))
+		h = md5.New()
+		A1 = fmt.Sprintf("%s:%s:%s", haPre, d.Nonce, d.Cnonce)
+		io.WriteString(h, A1)
+		d.HA1 = fmt.Sprintf("%x", h.Sum(nil))
+
+		// A2
+		h = md5.New()
+		A2 := fmt.Sprintf("%s:%s", d.Method, d.Path)
+		io.WriteString(h, A2)
+		d.HA2 = fmt.Sprintf("%x", h.Sum(nil))
 	default:
 		//token
 	}
