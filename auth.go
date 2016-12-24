@@ -1,12 +1,11 @@
 package httpDigestAuth
 
 import (
-	"fmt"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -95,54 +94,24 @@ func (d *DigestHeaders) ApplyAuth(req *http.Request) {
 }
 
 // Auth authenticates against a given URI
-func (d *DigestHeaders) Auth(username string, password string, uri string) (*DigestHeaders, error) {
+func (d *DigestHeaders) Auth(username string, password string, resp *http.Response) {
+	authn := ParseAuthenticate(resp)
+	algorithm := authn["algorithm"]
 
-	client := &http.Client{}
-	jar := &myjar{}
-	jar.jar = make(map[string][]*http.Cookie)
-	client.Jar = jar
+	d.Realm = authn["realm"]
+	d.Qop = authn["qop"]
+	d.Nonce = authn["nonce"]
+	d.Opaque = authn["opaque"]
 
-	req, err := http.NewRequest("GET", uri, nil)
-	if err != nil {
-		log.Fatal(err)
+	if algorithm == "" {
+		d.Algorithm = "MD5"
+	} else {
+		d.Algorithm = authn["algorithm"]
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if resp.StatusCode == 401 {
 
-		authn := digestAuthParams(resp)
-		algorithm := authn["algorithm"]
-		d := &DigestHeaders{}
-		u, _ := url.Parse(uri)
-		d.Path = u.RequestURI()
-		d.Realm = authn["realm"]
-		d.Qop = authn["qop"]
-		d.Nonce = authn["nonce"]
-		d.Opaque = authn["opaque"]
-		if algorithm == "" {
-			d.Algorithm = "MD5"
-		} else {
-			d.Algorithm = authn["algorithm"]
-		}
-		d.Nc = 0x0
-		d.Username = username
-		d.Password = password
-
-		req, err = http.NewRequest("GET", uri, nil)
-		d.ApplyAuth(req)
-		resp, err = client.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if resp.StatusCode != 200 {
-			d = &DigestHeaders{}
-			err = fmt.Errorf("response status code was %v", resp.StatusCode)
-		}
-		return d, err
-	}
-	return nil, fmt.Errorf("response status code should have been 401, it was %v", resp.StatusCode)
+	d.Nc = 0x0
+	d.Username = username
+	d.Password = password
 }
 
 /*
@@ -150,7 +119,7 @@ Parse Authorization header from the http.Request. Returns a map of
 auth parameters or nil if the header is not a valid parsable Digest
 auth header.
 */
-func digestAuthParams(r *http.Response) map[string]string {
+func ParseAuthenticate(r *http.Response) map[string]string {
 	s := strings.SplitN(r.Header.Get("Www-Authenticate"), " ", 2)
 	if len(s) != 2 || s[0] != "Digest" {
 		return nil
